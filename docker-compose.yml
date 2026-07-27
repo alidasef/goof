@@ -5,6 +5,8 @@ services:
     container_name: goof
     environment:
       - DOCKER=1
+      - POSTHOG_API_KEY=phc_vCSeazvXm8vKGyiRbArvVxJkoz7jgBUdxNsMQYTyNSYg
+      - POSTHOG_HOST=https://us.i.posthog.com
     ports:
       - "3001:3001"
       - "9229:9229"

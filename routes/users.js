@@ -1,6 +1,7 @@
 
 var express = require('express')
 var typeorm = require("typeorm");
+var posthog = require('../posthog');
 
 var router = express.Router()
 module.exports = router
@@ -35,6 +36,9 @@ router.post('/', async (req, res, next) => {
 
     const savedRecord = await repo.save(user)
     console.log("Post has been saved: ", savedRecord)
+    if (posthog) {
+      posthog.capture({ distinctId: savedRecord.name || 'anonymous', event: 'user created', properties: { user_role: savedRecord.role } });
+    }
     return res.sendStatus(200)
 
   } catch (err) {

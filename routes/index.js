@@ -1,4 +1,5 @@
 var utils = require('../utils');
+var posthog = require('../posthog');
 var mongoose = require('mongoose');
 var Todo = mongoose.model('Todo');
 var User = mongoose.model('User');
@@ -53,9 +54,15 @@ exports.loginHandler = function (req, res, next) {
 
 function adminLoginSuccess(redirectPage, session, username, res) {
   session.loggedIn = 1
+  session.username = username
 
   // Log the login action for audit
   console.log(`User logged in: ${username}`)
+
+  if (posthog) {
+    posthog.identify({ distinctId: username, properties: { email: username } });
+    posthog.capture({ distinctId: username, event: 'user logged in', properties: { username: username } });
+  }
 
   if (redirectPage) {
       return res.redirect(redirectPage)
@@ -103,6 +110,11 @@ exports.save_account_details = function(req, res, next) {
     profile.firstname = validator.rtrim(profile.firstname)
     profile.lastname = validator.rtrim(profile.lastname)
 
+    var distinctId = req.session.username || 'anonymous';
+    if (posthog) {
+      posthog.capture({ distinctId: distinctId, event: 'account details saved' });
+    }
+
     // render the view
     return res.render('account.hbs', profile)
   } else {
@@ -121,9 +133,13 @@ exports.isLoggedIn = function (req, res, next) {
 }
 
 exports.logout = function (req, res, next) {
+  var username = req.session.username;
   req.session.loggedIn = 0
-  req.session.destroy(function() { 
-    return res.redirect('/')  
+  req.session.destroy(function() {
+    if (posthog && username) {
+      posthog.capture({ distinctId: username, event: 'user logged out' });
+    }
+    return res.redirect('/')
   })
 }
 
@@ -175,6 +191,11 @@ exports.create = function (req, res, next) {
   }).save(function (err, todo, count) {
     if (err) return next(err);
 
+    var distinctId = req.session.username || 'anonymous';
+    if (posthog) {
+      posthog.capture({ distinctId: distinctId, event: 'todo created', properties: { todo_id: todo._id.toString() } });
+    }
+
     /*
     res.setHeader('Data', todo.content.toString('base64'));
     res.redirect('/');
@@ -193,6 +214,10 @@ exports.destroy = function (req, res, next) {
     try {
       todo.remove(function (err, todo) {
         if (err) return next(err);
+        var distinctId = req.session.username || 'anonymous';
+        if (posthog) {
+          posthog.capture({ distinctId: distinctId, event: 'todo deleted', properties: { todo_id: req.params.id } });
+        }
         res.redirect('/');
       });
     } catch (e) {
@@ -222,6 +247,11 @@ exports.update = function (req, res, next) {
     todo.updated_at = Date.now();
     todo.save(function (err, todo, count) {
       if (err) return next(err);
+
+      var distinctId = req.session.username || 'anonymous';
+      if (posthog) {
+        posthog.capture({ distinctId: distinctId, event: 'todo updated', properties: { todo_id: req.params.id } });
+      }
 
       res.redirect('/');
     });
@@ -292,6 +322,10 @@ exports.import = function (req, res, next) {
     }
   });
 
+  var distinctId = req.session.username || 'anonymous';
+  if (posthog) {
+    posthog.capture({ distinctId: distinctId, event: 'todos imported', properties: { file_type: importedFileType ? importedFileType.ext : 'unknown' } });
+  }
   res.redirect('/');
 };
 
@@ -351,6 +385,9 @@ exports.chat = {
     });
 
     messages.push(message);
+    if (posthog) {
+      posthog.capture({ distinctId: user.name, event: 'chat message sent' });
+    }
     res.send({ ok: true });
   },
   delete(req, res) {
@@ -362,6 +399,9 @@ exports.chat = {
     }
 
     messages = messages.filter((m) => m.id !== req.body.messageId);
+    if (posthog) {
+      posthog.capture({ distinctId: user.name, event: 'chat message deleted', properties: { message_id: req.body.messageId } });
+    }
     res.send({ ok: true });
   }
 };
