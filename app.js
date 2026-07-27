@@ -2,6 +2,8 @@
  * Module dependencies.
  */
 
+require('dotenv').config();
+
 // mongoose setup
 require('./mongoose-db');
 require('./typeorm-db')
@@ -28,6 +30,7 @@ const hbs = require('hbs')
 var app = express();
 var routes = require('./routes');
 var routesUsers = require('./routes/users.js')
+var posthog = require('./posthog');
 
 // all environments
 app.set('port', process.env.PORT || 3001);
@@ -80,9 +83,23 @@ if (app.get('env') == 'development') {
   app.use(errorHandler());
 }
 
+// PostHog error handler
+app.use(function (err, req, res, next) {
+  if (posthog) {
+    var distinctId = (req.session && req.session.username) || 'anonymous';
+    posthog.captureException(err, distinctId);
+  }
+  next(err);
+});
+
 var token = 'SECRET_TOKEN_f8ed84e8f41e4146403dd4a6bbcea5e418d23a9';
 console.log('token: ' + token);
 
-http.createServer(app).listen(app.get('port'), function () {
+var server = http.createServer(app).listen(app.get('port'), function () {
   console.log('Express server listening on port ' + app.get('port'));
+});
+
+process.on('SIGTERM', async function () {
+  if (posthog) await posthog.shutdown();
+  server.close();
 });
